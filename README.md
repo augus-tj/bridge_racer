@@ -1,5 +1,7 @@
 # Bridge Racer 
 
+Link: https://augus-tj.github.io/bridge_racer/
+
 ## Overview
 Bridge Racer V3 is a browser-based 3D endless highway racing game built with Three.js. Players drive across a suspension bridge, avoid hazards, perform stunt jumps, build score multipliers, and survive increasingly strange game states including Limbo Mode and Glitch Mode.
 
