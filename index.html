@@ -1,0 +1,1032 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>3D Bridge Highway Racer</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0; padding: 0; overflow: hidden;
+            background-color: #a3c2cc;
+            font-family: 'Segoe UI', sans-serif;
+            touch-action: none;
+            transition: background-color 0.5s ease;
+        }
+        #hud {
+            position: absolute; top: 20px; left: 20px;
+            color: #1a252c; font-size: 24px; font-weight: bold;
+            text-shadow: 1px 1px 2px rgba(255,255,255,0.8);
+            pointer-events: none; z-index: 5;
+            transition: color 0.5s ease;
+        }
+        #multiplier-ui { color: #d32f2f; font-size: 20px; margin-top: 5px; }
+        #blocker-ui {
+            color: #ff1744; font-size: 18px; font-weight: bold;
+            margin-top: 5px; display: none;
+            text-shadow: 1px 1px 1px rgba(0,0,0,0.2);
+        }
+        #speed { font-size: 18px; color: #455a64; margin-top: 5px; }
+        #glitch-overlay {
+            position: absolute; top: 0; left: 0;
+            width: 100vw; height: 100vh;
+            background: rgba(123, 31, 162, 0.25);
+            mix-blend-mode: color-burn; display: none;
+            pointer-events: none; z-index: 4;
+            border: 4px solid #7b1fa2;
+        }
+        #milestone-banner {
+            position: absolute; top: 35%; left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 34px; font-weight: bold;
+            text-align: center; display: none;
+            pointer-events: none; z-index: 6;
+            letter-spacing: 1px; line-height: 1.4;
+        }
+        #limbo-ui {
+            position: absolute; top: 20%; left: 50%;
+            transform: translateX(-50%);
+            font-size: 28px; font-weight: bold;
+            color: #111; text-align: center; display: none;
+            z-index: 6; animation: breathe 1.5s infinite alternate;
+        }
+        @keyframes breathe { 0% { opacity: 0.4; } 100% { opacity: 1; } }
+
+        /* --- PAUSE SCREEN --- */
+        #pause-screen {
+            position: absolute; top: 0; left: 0;
+            width: 100vw; height: 100vh;
+            background: rgba(10, 20, 25, 0.75);
+            backdrop-filter: blur(6px);
+            display: none; flex-direction: column;
+            justify-content: center; align-items: center;
+            color: #eceff1; z-index: 9;
+        }
+        #pause-screen .pause-title {
+            font-size: 52px; font-weight: 900; letter-spacing: 3px;
+            color: #ffca28; text-transform: uppercase; margin-bottom: 16px;
+        }
+        #pause-screen .pause-hint {
+            font-size: 18px; color: #b0bec5;
+            padding: 12px 24px; border: 2px solid #ffca28;
+            border-radius: 50px; cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        #pause-screen .pause-hint:hover { background: #ffca28; color: #111; }
+
+        /* --- GAME OVER SCREEN --- */
+        #gameover-screen {
+            position: absolute; top: 0; left: 0;
+            width: 100vw; height: 100vh;
+            background: rgba(10, 20, 25, 0.85);
+            backdrop-filter: blur(8px);
+            display: none; flex-direction: column;
+            justify-content: center; align-items: center;
+            color: #eceff1; z-index: 10;
+        }
+        .gameover-title {
+            font-size: 64px; font-weight: 900; letter-spacing: 4px;
+            color: #ff5722; margin-bottom: 10px; text-transform: uppercase;
+        }
+        .score-box {
+            font-size: 28px; margin: 20px 0;
+            padding: 15px 30px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 8px; border-left: 4px solid #ff5722;
+        }
+        .best-score-box { font-size: 20px; color: #ffea00; margin-top: 10px; }
+        .restart-hint {
+            font-size: 18px; color: #b0bec5; margin-top: 20px;
+            padding: 12px 24px; border: 2px solid #ff5722;
+            border-radius: 50px; cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .restart-hint:hover { background: #ff5722; color: white; }
+
+        /* --- MOBILE CONTROLS --- */
+        #mobile-controls {
+            position: absolute; bottom: 24px; left: 0; right: 0;
+            display: none;
+            justify-content: space-between;
+            align-items: flex-end;
+            padding: 0 20px;
+            pointer-events: none;
+            z-index: 7;
+        }
+        .ctrl-group { display: flex; gap: 12px; pointer-events: all; }
+        .ctrl-btn {
+            width: 64px; height: 64px;
+            background: rgba(255,255,255,0.18);
+            border: 2px solid rgba(255,255,255,0.5);
+            border-radius: 50%;
+            color: white; font-size: 22px; font-weight: bold;
+            display: flex; align-items: center; justify-content: center;
+            user-select: none; -webkit-user-select: none;
+            cursor: pointer; transition: background 0.15s;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+        }
+        .ctrl-btn:active { background: rgba(255,255,255,0.38); }
+        .ctrl-btn.jump { width: 72px; height: 72px; font-size: 26px; background: rgba(255,202,40,0.28); border-color: #ffca28; }
+        .ctrl-btn.down { background: rgba(255,87,34,0.28); border-color: #ff5722; }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+<div id="hud">
+    <div id="score">POINTS: 0</div>
+    <div id="multiplier-ui">COMBO: x1.0</div>
+    <div id="blocker-ui">BLOCKER: 20 CONES LEFT</div>
+    <div id="speed">SPEED: 80 MPH</div>
+</div>
+
+<div id="glitch-overlay"></div>
+<div id="milestone-banner"></div>
+<div id="limbo-ui">LIMBO STATE: DODGE CATS TO ESCAPE<br><span id="limbo-count">0 / 10</span></div>
+
+<div id="pause-screen">
+    <div class="pause-title">Paused</div>
+    <div class="pause-hint" onclick="togglePause()">TAP OR PRESS P TO RESUME</div>
+</div>
+
+<div id="gameover-screen">
+    <div class="gameover-title">Crashed</div>
+    <div class="score-box" id="final-score">Final Score: 0</div>
+    <div class="best-score-box" id="high-score-display">Best: 0</div>
+    <div class="restart-hint" onclick="resetGame()">TAP OR PRESS SPACE TO RESTART</div>
+</div>
+
+<!-- Mobile on-screen controls -->
+<div id="mobile-controls">
+    <div class="ctrl-group">
+        <div class="ctrl-btn" ontouchstart="sl(-1)">◀</div>
+        <div class="ctrl-btn" ontouchstart="sl(1)">▶</div>
+    </div>
+    <div class="ctrl-group" style="flex-direction:column; align-items:center; gap:10px;">
+        <div class="ctrl-btn jump" ontouchstart="triggerJump()">▲</div>
+        <div class="ctrl-btn down" ontouchstart="triggerFastDescent()">▼</div>
+    </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+//  STATE — single source of truth
+// ─────────────────────────────────────────────
+const DEFAULT_STATE = () => ({
+    gameOver:   false,
+    paused:     false,
+    score:      0,
+    highScore:  parseInt(localStorage.getItem('bridgeRacerHS') || '0'),
+    scoreMultiplier: 1.0,
+    gameSpeed:  1.2,
+    basePaceSpeed: 1.2,
+
+    // Jump / stunt
+    carYVelocity:    0,
+    isJumping:       false,
+    isStuntJumping:  false,
+    currentBaseCarY: 0.35,
+    hasJumpedOrUsedRamp: false,
+
+    // Spring deform
+    springTargetYScale:  1.0,
+    springTargetXZScale: 1.0,
+
+    // Milestones
+    activeBannerTimer:        0,
+    highestMilestoneReached:  0,
+    lowestMilestoneReached:   0,
+    currentCatPenaltyMult:    1.0,
+
+    // Limbo
+    inLimboMode:   false,
+    limboCatsDodged: 0,
+
+    // Blocker / ramp
+    coneBlockerCount:  0,
+    lastRampScoreTier: 0,
+    rampPendingSpawn:  false,
+
+    // Spawn
+    spawnAccum: 0,  // seconds accumulator (replaces frame counter)
+});
+
+let S = DEFAULT_STATE();
+let targetLane = 0;
+
+const ROAD_LENGTH = 800;
+const LANE_WIDTH  = 4;
+
+const SPAWN_INTERVAL = 0.43; // seconds between spawns
+
+const GRAVITY          = -0.015;
+const JUMP_STRENGTH    = 0.38;
+const RAMP_JUMP_STR    = 0.72;
+const FAST_DESCENT     = -0.55;
+
+// ─────────────────────────────────────────────
+//  MESSAGES
+// ─────────────────────────────────────────────
+const MSG = {
+    m1000:  { text: "MILESTONE 1:<br>THE HIGHWAY STRETCHES ON",       color: "#0288d1" },
+    m10000: { text: "MILESTONE 2:<br>WELCOME TO THE CIVILIZATION",    color: "#00e676" },
+    m99999: { text: "COMPLETION:<br>YOU HAVE CONQUERED THE BRIDGE!",  color: "#ffea00" },
+    mN100:  { text: "KILL MORE CATS... I DARE YOU!",                   color: "#ff1744" },
+    mN200:  { text: "I DOUBLE DARE YOU.",                              color: "#d50000" },
+    mN300:  { text: "CORPSE OVERLOAD DETECTED",                        color: "#aa00ff" },
+    mN400:  { text: "CRITICAL CRASH: OVERRIDE SEQUENCE INITIATED",     color: "#212121" },
+    mN500:  { text: "PLAYER IS GONE.<br>THE DEVIL IS HERE.",           color: "#311b92" },
+};
+
+// ─────────────────────────────────────────────
+//  THREE.JS SCENE
+// ─────────────────────────────────────────────
+const scene    = new THREE.Scene();
+scene.background = new THREE.Color(0xa3c2cc);
+scene.fog        = new THREE.FogExp2(0xa3c2cc, 0.005);
+
+const camera   = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 2000);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+document.body.appendChild(renderer.domElement);
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+const sunLight = new THREE.DirectionalLight(0xfffaed, 0.7);
+sunLight.position.set(40, 100, 20);
+scene.add(sunLight);
+
+// ── WORLD ENVIRONMENT GROUP ──
+const worldEnv = new THREE.Group();
+scene.add(worldEnv);
+
+// Ocean
+const ocean = new THREE.Mesh(
+    new THREE.PlaneGeometry(3000, ROAD_LENGTH),
+    new THREE.MeshLambertMaterial({ color: 0x4a6984 })
+);
+ocean.rotation.x = -Math.PI / 2;
+ocean.position.set(0, -4, -ROAD_LENGTH / 2 + 10);
+worldEnv.add(ocean);
+
+// Road
+const road = new THREE.Mesh(
+    new THREE.PlaneGeometry(13.5, ROAD_LENGTH),
+    new THREE.MeshLambertMaterial({ color: 0x3e4a52 })
+);
+road.rotation.x = -Math.PI / 2;
+road.position.set(0, 0, -ROAD_LENGTH / 2 + 10);
+scene.add(road);
+
+// Guard rails
+const railGeo = new THREE.BoxGeometry(0.4, 0.8, ROAD_LENGTH);
+const railMat = new THREE.MeshLambertMaterial({ color: 0xb0bec5 });
+const leftRail = new THREE.Mesh(railGeo, railMat);
+leftRail.position.set(-6.6, 0.4, -ROAD_LENGTH / 2 + 10);
+scene.add(leftRail);
+const rightRail = leftRail.clone();
+rightRail.position.x = 6.6;
+scene.add(rightRail);
+
+// Lane lines
+const laneMat = new THREE.MeshBasicMaterial({ color: 0xffcc00 });
+const leftLane = new THREE.Mesh(new THREE.PlaneGeometry(0.15, ROAD_LENGTH), laneMat);
+leftLane.rotation.x = -Math.PI / 2;
+leftLane.position.set(-2.2, 0.02, -ROAD_LENGTH / 2 + 10);
+scene.add(leftLane);
+const rightLane = leftLane.clone();
+rightLane.position.x = 2.2;
+scene.add(rightLane);
+
+// ── PROCEDURAL SKY (no external hotlink) ──
+const skyGeo  = new THREE.SphereGeometry(900, 32, 15);
+const skyMat  = new THREE.MeshBasicMaterial({ color: 0xc9dde8, side: THREE.BackSide, fog: false });
+const skyDome = new THREE.Mesh(skyGeo, skyMat);
+scene.add(skyDome);
+
+// Procedural cloud puffs on sky dome
+(function addClouds() {
+    const cloudMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55, fog: false });
+    for (let i = 0; i < 28; i++) {
+        const angle  = Math.random() * Math.PI * 2;
+        const elev   = Math.PI * 0.18 + Math.random() * Math.PI * 0.22;
+        const radius = 820;
+        const x = radius * Math.cos(elev) * Math.cos(angle);
+        const y = radius * Math.sin(elev);
+        const z = radius * Math.cos(elev) * Math.sin(angle);
+        const g = new THREE.Group();
+        for (let p = 0; p < 4; p++) {
+            const m = new THREE.Mesh(new THREE.SphereGeometry(35 + Math.random() * 55, 7, 5), cloudMat);
+            m.position.set((Math.random() - 0.5) * 90, (Math.random() - 0.5) * 30, (Math.random() - 0.5) * 60);
+            g.add(m);
+        }
+        g.position.set(x, y, z);
+        g.lookAt(0, 0, 0);
+        skyDome.add(g);
+    }
+})();
+
+// ── BRIDGE PYLONS ──
+const bridgeGroup = new THREE.Group();
+worldEnv.add(bridgeGroup);
+
+(function buildPylons() {
+    const pylonMat = new THREE.MeshLambertMaterial({ color: 0xeceff1 });
+    const cableMat = new THREE.MeshBasicMaterial({ color: 0x455a64 });
+    [-40, -180, -320, -460, -600].forEach(zPos => {
+        const tL = new THREE.Mesh(new THREE.BoxGeometry(0.6, 52, 1.6), pylonMat);
+        tL.position.set(-6.4, 22, zPos); bridgeGroup.add(tL);
+        const tR = tL.clone(); tR.position.x = 6.4; bridgeGroup.add(tR);
+        const beam = new THREE.Mesh(new THREE.BoxGeometry(13.4, 1.0, 1.4), pylonMat);
+        beam.position.set(0, 42, zPos); bridgeGroup.add(beam);
+
+        // FIX: use THREE.Line (2 pts each) instead of LineSegments with 4-pt array
+        for (let c = 1; c <= 10; c++) {
+            const spread = c * 6.5;
+            [[-6.4, zPos + spread], [-6.4, zPos - spread], [6.4, zPos + spread], [6.4, zPos - spread]].forEach(([cx, cz]) => {
+                const pts = [new THREE.Vector3(cx < 0 ? -6.4 : 6.4, 44, zPos), new THREE.Vector3(cx < 0 ? -6.4 : 6.4, 0.4, cz)];
+                bridgeGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), cableMat));
+            });
+        }
+    });
+})();
+
+// ─────────────────────────────────────────────
+//  PLAYER CAR
+// ─────────────────────────────────────────────
+const playerGroup  = new THREE.Group();
+const carDeformBody = new THREE.Group();
+playerGroup.add(carDeformBody);
+
+const carBody = new THREE.Mesh(
+    new THREE.BoxGeometry(1.6, 0.5, 3.2),
+    new THREE.MeshLambertMaterial({ color: 0xd32f2f })
+);
+carBody.position.y = 0.2;
+carDeformBody.add(carBody);
+
+const carCabin = new THREE.Mesh(
+    new THREE.BoxGeometry(1.1, 0.45, 1.6),
+    new THREE.MeshLambertMaterial({ color: 0x212121 })
+);
+carCabin.position.set(0, 0.6, -0.1);
+carDeformBody.add(carCabin);
+
+const wheelGroup = new THREE.Group();
+playerGroup.add(wheelGroup);
+
+function makeWheel() {
+    const g = new THREE.Group();
+    const tyre = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 0.28, 16), new THREE.MeshLambertMaterial({ color: 0x1c2327 }));
+    tyre.rotation.z = Math.PI / 2; g.add(tyre);
+    const rim  = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.30, 12), new THREE.MeshLambertMaterial({ color: 0x90a4ae }));
+    rim.rotation.z = Math.PI / 2; g.add(rim);
+    return g;
+}
+const wheels = [
+    Object.assign(makeWheel(), { _pos: [-0.88, 0.1, -0.9] }),
+    Object.assign(makeWheel(), { _pos: [ 0.88, 0.1, -0.9] }),
+    Object.assign(makeWheel(), { _pos: [-0.88, 0.1,  0.9] }),
+    Object.assign(makeWheel(), { _pos: [ 0.88, 0.1,  0.9] }),
+];
+wheels.forEach(w => { w.position.set(...w._pos); wheelGroup.add(w); });
+
+playerGroup.position.set(0, S.currentBaseCarY, -5);
+scene.add(playerGroup);
+camera.position.set(0, 3.2, 2.8);
+camera.lookAt(new THREE.Vector3(0, 0.8, -20));
+
+// ─────────────────────────────────────────────
+//  OBSTACLE MESHES
+// ─────────────────────────────────────────────
+let obstacles = [];
+let particles  = [];
+
+function makeTrafficCone() {
+    const g = new THREE.Group();
+    g.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.08, 1.1), new THREE.MeshLambertMaterial({ color: 0x263238 })), { position: { x:0, y:0.04, z:0 } }));
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.45, 1.3, 16), new THREE.MeshLambertMaterial({ color: 0xff6f00 }));
+    body.position.y = 0.65; g.add(body);
+    const stripe = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.3, 0.35, 16), new THREE.MeshBasicMaterial({ color: 0xf5f5f5 }));
+    stripe.position.y = 0.7; g.add(stripe);
+    return g;
+}
+
+function makeCat() {
+    const g = new THREE.Group();
+    const m = new THREE.MeshLambertMaterial({ color: 0xffb74d });
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.6, 1.5), m); body.position.y = 0.4; g.add(body);
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.5, 0.5), m); head.position.set(0, 0.8, -0.6); g.add(head);
+    const earL = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.25, 4), m); earL.position.set(-0.2, 1.1, -0.6); g.add(earL);
+    const earR = earL.clone(); earR.position.x = 0.2; g.add(earR);
+    const legG = new THREE.BoxGeometry(0.18, 0.35, 0.18);
+    const lf = new THREE.Mesh(legG, m); lf.position.set(-0.3, 0.18, -0.4); g.add(lf);
+    const rf = new THREE.Mesh(legG, m); rf.position.set( 0.3, 0.18, -0.4); g.add(rf);
+    const lb = new THREE.Mesh(legG, m); lb.position.set(-0.3, 0.18,  0.4); g.add(lb);
+    const rb = new THREE.Mesh(legG, m); rb.position.set( 0.3, 0.18,  0.4); g.add(rb);
+    g.userData.legs = { lf, rf, lb, rb };
+    g.rotation.y = Math.PI;
+    return g;
+}
+
+function makeDemon() {
+    const g = new THREE.Group();
+    const m = new THREE.MeshLambertMaterial({ color: 0x7b1fa2 });
+    const body = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.0, 1.0), m); body.position.y = 0.9; g.add(body);
+    const hL = new THREE.Mesh(new THREE.ConeGeometry(0.15, 0.4, 4), new THREE.MeshLambertMaterial({ color: 0xe91e63 })); hL.position.set(-0.35, 1.5, 0); g.add(hL);
+    const hR = hL.clone(); hR.position.x = 0.35; g.add(hR);
+    const wL = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.3, 0.08), m); wL.position.set(-0.7, 1.0, 0); g.add(wL);
+    const wR = wL.clone(); wR.position.x = 0.7; g.add(wR);
+    g.userData.wings = { left: wL, right: wR };
+    return g;
+}
+
+function makeHuman() {
+    const g = new THREE.Group();
+    const pants = new THREE.MeshLambertMaterial({ color: 0x1565c0 });
+    const shirt  = new THREE.MeshLambertMaterial({ color: 0xe0e0e0 });
+    const skin   = new THREE.MeshLambertMaterial({ color: 0xffcc80 });
+    const torso  = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.9, 0.35), shirt); torso.position.y = 1.15; g.add(torso);
+    const head   = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), skin); head.position.y = 1.8; g.add(head);
+    const lL = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.7, 0.25), pants); lL.position.set(-0.2, 0.35, 0); g.add(lL);
+    const lR = lL.clone(); lR.position.x = 0.2; g.add(lR);
+    g.userData.legs = { left: lL, right: lR };
+    return g;
+}
+
+function makeRamp() {
+    const g = new THREE.Group();
+    const v = new Float32Array([
+        -1.5,0,2,  1.5,0,2,  -1.5,0.9,-2,
+         1.5,0,2,  1.5,0.9,-2, -1.5,0.9,-2,
+        -1.5,0,2,  -1.5,0.9,-2, -1.5,0,-2,
+         1.5,0,2,   1.5,0,-2,   1.5,0.9,-2,
+        -1.5,0,-2,  1.5,0,-2,   1.5,0.9,-2,
+        -1.5,0,-2,  1.5,0.9,-2,-1.5,0.9,-2,
+    ]);
+    const wGeo = new THREE.BufferGeometry();
+    wGeo.setAttribute('position', new THREE.BufferAttribute(v, 3));
+    wGeo.computeVertexNormals();
+    g.add(new THREE.Mesh(wGeo, new THREE.MeshLambertMaterial({ color: 0x00e676 })));
+    const eM = new THREE.MeshBasicMaterial({ color: 0xbaff00 });
+    const eL = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 4), eM); eL.position.set(-1.45, 0.45, 0); eL.rotation.x = 0.22; g.add(eL);
+    const eR = eL.clone(); eR.position.x = 1.45; g.add(eR);
+    return g;
+}
+
+function makeHoop() {
+    const g = new THREE.Group();
+    const t = new THREE.Mesh(new THREE.TorusGeometry(1.8, 0.16, 8, 24), new THREE.MeshBasicMaterial({ color: 0xffd700 }));
+    t.position.y = 4.2; g.add(t);
+    return g;
+}
+
+function makeCollapseTrap() {
+    const g = new THREE.Group();
+    const hole = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 6.0), new THREE.MeshBasicMaterial({ color: 0x111111 }));
+    hole.rotation.x = -Math.PI / 2; hole.position.y = 0.03; g.add(hole);
+    const lM = new THREE.MeshBasicMaterial({ color: 0xd32f2f });
+    const lF = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.05, 0.2), lM); lF.position.set(0, 0.04, -3.0); g.add(lF);
+    const lB = lF.clone(); lB.position.z = 3.0; g.add(lB);
+    return g;
+}
+
+// ─────────────────────────────────────────────
+//  PARTICLES
+// ─────────────────────────────────────────────
+function spawnParticles(x, z, color) {
+    const geo = new THREE.BoxGeometry(0.2, 0.2, 0.2);
+    const mat = new THREE.MeshBasicMaterial({ color });
+    for (let i = 0; i < 12; i++) {
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set(x + (Math.random() - 0.5) * 0.5, 0.3, z);
+        scene.add(mesh);
+        particles.push({
+            mesh, life: 1.0,
+            vx: (Math.random() - 0.5) * 0.3,
+            vy: 0.2 + Math.random() * 0.3,
+            vz: -S.gameSpeed + (Math.random() - 0.5) * 0.2,
+        });
+    }
+}
+
+// ─────────────────────────────────────────────
+//  SPAWNER
+// ─────────────────────────────────────────────
+function spawnObstacle(delta) {
+    S.spawnAccum += delta;
+    if (obstacles.length >= 14 || S.spawnAccum < SPAWN_INTERVAL) return;
+    S.spawnAccum = 0;
+
+    // Check if it's time to queue a ramp
+    if (S.score > 0 && S.score >= S.lastRampScoreTier + 1000) {
+        S.lastRampScoreTier = Math.floor(S.score / 1000) * 1000;
+        S.rampPendingSpawn = true;
+    }
+
+    const lanes = [-LANE_WIDTH, 0, LANE_WIDTH];
+    let lane = lanes[Math.floor(Math.random() * lanes.length)];
+    let type, mesh;
+    const r = Math.random();
+
+    if (S.inLimboMode) {
+        type = 'cat'; mesh = makeCat();
+    } else if (S.rampPendingSpawn) {
+        type = 'ramp'; mesh = makeRamp(); S.rampPendingSpawn = false;
+    } else if (r < 0.20) {
+        type = 'collapse'; lane = Math.random() < 0.5 ? -LANE_WIDTH : LANE_WIDTH; mesh = makeCollapseTrap();
+    } else if (r < 0.45) {
+        type = 'cat'; mesh = makeCat();
+    } else if (r < 0.55 && S.score >= 10000) {
+        type = 'human'; mesh = makeHuman();
+    } else if (r < 0.62) {
+        type = 'demon'; mesh = makeDemon();
+    } else {
+        type = 'cone'; mesh = makeTrafficCone();
+    }
+
+    mesh.position.set(lane, 0, -280);
+    mesh.userData = { type, dgd: false, collected: false, spawnTime: performance.now(), lane };
+    scene.add(mesh);
+    obstacles.push(mesh);
+
+    if (type === 'ramp') {
+        const hoop = makeHoop();
+        hoop.position.set(lane, 0, -266);
+        hoop.userData = { type: 'hoop', dgd: false, collected: false, spawnTime: performance.now(), lane };
+        scene.add(hoop);
+        obstacles.push(hoop);
+    }
+}
+
+// ─────────────────────────────────────────────
+//  CONTROLS
+// ─────────────────────────────────────────────
+function sl(dir) {
+    if (dir === -1 && targetLane > -LANE_WIDTH)  targetLane -= LANE_WIDTH;
+    if (dir ===  1 && targetLane <  LANE_WIDTH)  targetLane += LANE_WIDTH;
+}
+
+function triggerJump() {
+    if (!S.isJumping) {
+        S.isJumping = true;
+        S.isStuntJumping = false;
+        S.carYVelocity = JUMP_STRENGTH;
+        S.hasJumpedOrUsedRamp = true;
+        S.springTargetYScale  = 1.45;
+        S.springTargetXZScale = 0.80;
+    }
+}
+
+function triggerFastDescent() {
+    if (S.isJumping && S.carYVelocity > FAST_DESCENT) {
+        S.carYVelocity = FAST_DESCENT;
+        S.springTargetYScale  = 0.85;
+        S.springTargetXZScale = 1.10;
+    }
+}
+
+function togglePause() {
+    if (S.gameOver) return;
+    S.paused = !S.paused;
+    document.getElementById('pause-screen').style.display = S.paused ? 'flex' : 'none';
+    if (!S.paused) { clock.getDelta(); animate(); }
+}
+
+// Keyboard
+window.addEventListener('keydown', e => {
+    if (S.gameOver && (e.key === ' ' || e.key.toLowerCase() === 'w' || e.key === 'ArrowUp')) { resetGame(); return; }
+    if (S.paused   && (e.key === 'p' || e.key === 'Escape' || e.key === ' ')) { togglePause(); return; }
+    if (S.paused) return;
+    if (e.key === 'p' || e.key === 'Escape') { togglePause(); return; }
+    if (e.key === 'ArrowLeft'  || e.key.toLowerCase() === 'a') sl(-1);
+    if (e.key === 'ArrowRight' || e.key.toLowerCase() === 'd') sl(1);
+    if (e.key === 'ArrowUp'    || e.key.toLowerCase() === 'w') triggerJump();
+    if (e.key === 'ArrowDown'  || e.key.toLowerCase() === 's') triggerFastDescent();
+});
+
+// Touch swipe
+let tsX = 0, tsY = 0;
+window.addEventListener('touchstart', e => {
+    if (S.gameOver) { resetGame(); return; }
+    if (S.paused)   { togglePause(); return; }
+    tsX = e.changedTouches[0].screenX;
+    tsY = e.changedTouches[0].screenY;
+}, { passive: true });
+
+window.addEventListener('touchend', e => {
+    if (S.gameOver || S.paused) return;
+    const dX = e.changedTouches[0].screenX - tsX;
+    const dY = e.changedTouches[0].screenY - tsY;
+    if (Math.abs(dY) > Math.abs(dX) && Math.abs(dY) > 35) {
+        if (dY < 0) triggerJump(); else triggerFastDescent();
+    } else if (Math.abs(dX) > Math.abs(dY) && Math.abs(dX) > 35) {
+        if (dX > 0) sl(1); else sl(-1);
+    }
+}, { passive: true });
+
+// ─────────────────────────────────────────────
+//  HUD HELPERS
+// ─────────────────────────────────────────────
+function updateScoreHUD() {
+    document.getElementById('score').innerText        = `POINTS: ${S.score}`;
+    document.getElementById('multiplier-ui').innerText = `COMBO: x${S.scoreMultiplier.toFixed(1)}`;
+}
+
+function fireBanner(cfg) {
+    const b = document.getElementById('milestone-banner');
+    b.innerHTML = cfg.text; b.style.color = cfg.color; b.style.display = 'block';
+    S.activeBannerTimer = 180;
+}
+
+function setWorldSkin(limbo) {
+    const skyColor = limbo ? 0xffffff : 0xa3c2cc;
+    scene.background.setHex(skyColor);
+    scene.fog.color.setHex(skyColor);
+    document.body.style.backgroundColor = limbo ? '#ffffff' : '#a3c2cc';
+    document.getElementById('hud').style.color = limbo ? '#111111' : '#1a252c';
+    skyMat.color.setHex(limbo ? 0xffffff : 0xc9dde8);
+    if (limbo) {
+        worldEnv.remove(ocean); worldEnv.remove(bridgeGroup); scene.remove(skyDome);
+    } else {
+        if (!worldEnv.children.includes(ocean))       worldEnv.add(ocean);
+        if (!worldEnv.children.includes(bridgeGroup)) worldEnv.add(bridgeGroup);
+        if (!scene.children.includes(skyDome))         scene.add(skyDome);
+    }
+}
+
+// ─────────────────────────────────────────────
+//  COLLISION / SCORING HELPERS
+// ─────────────────────────────────────────────
+function triggerGameOver() {
+    S.gameOver = true;
+    if (S.score > S.highScore) {
+        S.highScore = S.score;
+        localStorage.setItem('bridgeRacerHS', S.highScore);
+    }
+    document.getElementById('final-score').innerText      = `Final Score: ${S.score}`;
+    document.getElementById('high-score-display').innerText = `Best: ${S.highScore}`;
+    document.getElementById('gameover-screen').style.display = 'flex';
+}
+
+// ─────────────────────────────────────────────
+//  RESET
+// ─────────────────────────────────────────────
+function resetGame() {
+    const savedHS = S.highScore; // persist across resets
+    S = DEFAULT_STATE();
+    S.highScore = savedHS;
+    targetLane = 0;
+
+    setWorldSkin(false);
+    playerGroup.position.set(0, S.currentBaseCarY, -5);
+    playerGroup.rotation.set(0, 0, 0);
+    carDeformBody.scale.set(1, 1, 1);
+
+    obstacles.forEach(o => scene.remove(o)); obstacles = [];
+    particles.forEach(p => scene.remove(p.mesh)); particles = [];
+    worldEnv.position.z = 0;
+
+    document.getElementById('gameover-screen').style.display  = 'none';
+    document.getElementById('pause-screen').style.display     = 'none';
+    document.getElementById('glitch-overlay').style.display   = 'none';
+    document.getElementById('milestone-banner').style.display = 'none';
+    document.getElementById('blocker-ui').style.display       = 'none';
+    document.getElementById('limbo-ui').style.display         = 'none';
+    renderer.domElement.style.transform = 'none';
+
+    updateScoreHUD();
+    clock.getDelta();
+    animate();
+}
+
+// ─────────────────────────────────────────────
+//  MAIN LOOP
+// ─────────────────────────────────────────────
+const clock = new THREE.Clock();
+
+function animate() {
+    if (S.gameOver || S.paused) return;
+    requestAnimationFrame(animate);
+
+    const delta = clock.getDelta();
+    const step  = delta * 60;
+    const now   = performance.now();
+
+    // Speed ramp
+    S.basePaceSpeed += 0.00015 * step;
+
+    if (S.score <= -1000 && S.score > -10000) {
+        S.gameSpeed = 4.5;
+    } else if (S.inLimboMode) {
+        S.gameSpeed = 1.6;
+    } else {
+        S.gameSpeed = S.basePaceSpeed;
+    }
+
+    // ── Jump physics ──
+    if (S.isJumping) {
+        S.currentBaseCarY += S.carYVelocity * step;
+        S.carYVelocity    += GRAVITY * step;
+
+        if (S.isStuntJumping) playerGroup.rotation.z += 0.16 * step;
+
+        if (Math.abs(S.carYVelocity) < 0.05) {
+            S.springTargetYScale  = 1.0;
+            S.springTargetXZScale = 1.0;
+        }
+
+        if (S.currentBaseCarY <= 0.35) {
+            S.currentBaseCarY = 0.35;
+            S.isJumping       = false;
+            S.isStuntJumping  = false;
+            playerGroup.rotation.z = 0;
+
+            if (S.carYVelocity <= FAST_DESCENT) {
+                carDeformBody.scale.set(1.50, 0.35, 1.30);
+            } else {
+                carDeformBody.scale.set(1.35, 0.50, 1.20);
+            }
+            S.carYVelocity = 0;
+            S.springTargetYScale  = 1.0;
+            S.springTargetXZScale = 1.0;
+        }
+    }
+
+    // Spring deform settle
+    const sp = 1 - Math.exp(-12 * delta);
+    carDeformBody.scale.y += (S.springTargetYScale  - carDeformBody.scale.y) * sp;
+    carDeformBody.scale.x += (S.springTargetXZScale - carDeformBody.scale.x) * sp;
+    carDeformBody.scale.z += (S.springTargetXZScale - carDeformBody.scale.z) * sp;
+
+    // Wheel spin
+    wheels.forEach(w => { w.rotation.x -= S.gameSpeed * 0.25 * step; });
+
+    // ── Milestone checks ──
+    if (S.score >= 100 && S.highestMilestoneReached < 100) {
+        S.highestMilestoneReached = 100; S.scoreMultiplier = 3.0;
+    }
+    if (S.score >= 1000 && S.highestMilestoneReached < 1000) {
+        S.highestMilestoneReached = 1000; fireBanner(MSG.m1000);
+    }
+    if (S.score >= 10000 && S.highestMilestoneReached < 10000) {
+        S.highestMilestoneReached = 10000; fireBanner(MSG.m10000);
+    }
+    if (S.score >= 99999) {
+        S.score = 99999;
+        if (S.highestMilestoneReached < 99999) { S.highestMilestoneReached = 99999; fireBanner(MSG.m99999); }
+    }
+
+    if (S.score <= -100  && S.score > -200  && S.lowestMilestoneReached > -100)  { S.lowestMilestoneReached = -100;  S.currentCatPenaltyMult = 1.5; fireBanner(MSG.mN100); }
+    if (S.score <= -200  && S.score > -300  && S.lowestMilestoneReached > -200)  { S.lowestMilestoneReached = -200;  fireBanner(MSG.mN200); }
+    if (S.score <= -300  && S.score > -400  && S.lowestMilestoneReached > -300)  { S.lowestMilestoneReached = -300;  S.currentCatPenaltyMult = 3.0; fireBanner(MSG.mN300); }
+
+    // Limbo trigger (with jump guard)
+    if (S.score <= -400 && S.score > -500 && !S.inLimboMode && S.lowestMilestoneReached > -400) {
+        if (S.hasJumpedOrUsedRamp) {
+            S.lowestMilestoneReached = -400;
+            S.inLimboMode   = true;
+            S.limboCatsDodged = 0;
+            fireBanner(MSG.mN400);
+            setWorldSkin(true);
+            obstacles.forEach(o => scene.remove(o)); obstacles = [];
+            document.getElementById('limbo-ui').style.display = 'block';
+            document.getElementById('limbo-count').innerText = '0 / 10';
+        } else {
+            // Soft bounce — don't trap players who never jumped
+            S.score = -350;
+            updateScoreHUD();
+        }
+    }
+
+    // Glitch zone
+    if (S.score <= -500 && S.score > -10000) {
+        if (S.lowestMilestoneReached > -500) { S.lowestMilestoneReached = -500; fireBanner(MSG.mN500); }
+        document.getElementById('glitch-overlay').style.display = 'block';
+        renderer.domElement.style.transform = `translate(${(Math.random()-0.5)*8}px,${(Math.random()-0.5)*8}px)`;
+    } else {
+        document.getElementById('glitch-overlay').style.display = 'none';
+        if (!S.inLimboMode) renderer.domElement.style.transform = 'none';
+    }
+
+    // FIX: Limbo exit returns player to positive score, not -499
+    // (handled in obstacle loop below)
+
+    // Score wraparound at -10000
+    if (S.score <= -10000) {
+        S.score = 10000; S.scoreMultiplier = 1.0; S.basePaceSpeed = 1.5;
+        S.coneBlockerCount = 0; S.lowestMilestoneReached = 0;
+        document.getElementById('blocker-ui').style.display = 'none';
+        fireBanner(MSG.m10000);
+        updateScoreHUD();
+    }
+
+    // Banner timer
+    if (S.activeBannerTimer > 0) {
+        S.activeBannerTimer -= step;
+        if (S.activeBannerTimer <= 0) {
+            S.activeBannerTimer = 0;
+            document.getElementById('milestone-banner').style.display = 'none';
+        }
+    }
+
+    // Blocker HUD
+    if (S.coneBlockerCount > 0 && !S.inLimboMode) {
+        document.getElementById('blocker-ui').style.display = 'block';
+        document.getElementById('blocker-ui').innerText = `BLOCKER: ${S.coneBlockerCount} CONES LEFT`;
+    } else {
+        document.getElementById('blocker-ui').style.display = 'none';
+    }
+
+    // World scroll
+    worldEnv.position.z += S.gameSpeed * step;
+    // FIX: wraparound threshold set to full road length
+    if (worldEnv.position.z > ROAD_LENGTH) worldEnv.position.z = 0;
+
+    skyDome.rotation.y   += 0.0001 * step;
+    skyDome.position.x    = playerGroup.position.x * 0.85;
+
+    // Player lateral movement
+    playerGroup.position.x += (targetLane - playerGroup.position.x) * (1 - Math.exp(-9 * delta));
+    playerGroup.position.y  = S.currentBaseCarY + (S.isJumping ? 0 : Math.sin(now * 0.05) * 0.01);
+    if (!S.isStuntJumping)  playerGroup.rotation.z = -(playerGroup.position.x - targetLane) * 0.06;
+
+    spawnObstacle(delta);
+
+    // ── Particles ──
+    for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.mesh.position.x += p.vx * step;
+        p.mesh.position.y += p.vy * step;
+        p.mesh.position.z += p.vz * step;
+        p.vy -= 0.015 * step;
+        p.life -= 0.025 * step;
+        p.mesh.scale.setScalar(Math.max(0, p.life));
+        if (p.life <= 0) { scene.remove(p.mesh); particles.splice(i, 1); }
+    }
+
+    // ── Obstacles ──
+    for (let i = obstacles.length - 1; i >= 0; i--) {
+        const obs = obstacles[i];
+        obs.position.z += S.gameSpeed * step;
+
+        // Animations
+        if (obs.userData.type === 'cat' && obs.userData.legs) {
+            // FIX: scale leg oscillation speed with gameSpeed
+            const w = Math.sin((now - obs.userData.spawnTime) * 0.018 * S.gameSpeed);
+            const { lf, rf, lb, rb } = obs.userData.legs;
+            lf.rotation.x = w * 0.5; rb.rotation.x =  w * 0.5;
+            rf.rotation.x = -w * 0.5; lb.rotation.x = -w * 0.5;
+        }
+        if (obs.userData.type === 'demon' && obs.userData.wings) {
+            obs.position.y = 0.3 + Math.abs(Math.sin((now - obs.userData.spawnTime) * 0.025)) * 0.3;
+            obs.userData.wings.left.rotation.z  =  Math.sin(now * 0.04) * 0.4;
+            obs.userData.wings.right.rotation.z = -Math.sin(now * 0.04) * 0.4;
+        }
+        if (obs.userData.type === 'human' && obs.userData.legs) {
+            const w = Math.sin((now - obs.userData.spawnTime) * 0.012);
+            obs.userData.legs.left.rotation.x  =  w * 0.4;
+            obs.userData.legs.right.rotation.x = -w * 0.4;
+        }
+        if (obs.userData.type === 'hoop') obs.rotation.y += 0.02 * step;
+
+        // ── DODGE PASS TICK ──
+        // FIX: only fire once, skip already-collected items, skip ramps (handled by collision)
+        if (!obs.userData.dgd && obs.position.z > -3.5) {
+            obs.userData.dgd = true;
+
+            if (obs.userData.collected) {
+                // already handled at collection time — remove cleanly
+                scene.remove(obs); obstacles.splice(i, 1); continue;
+            }
+
+            if (S.inLimboMode) {
+                if (obs.userData.type === 'cat') {
+                    S.limboCatsDodged++;
+                    document.getElementById('limbo-count').innerText = `${S.limboCatsDodged} / 10`;
+                    if (S.limboCatsDodged >= 10) {
+                        S.inLimboMode = false;
+                        document.getElementById('limbo-ui').style.display = 'none';
+                        setWorldSkin(false);
+                        // FIX: reward player with positive score, not -499
+                        S.score = 200;
+                        S.scoreMultiplier = 2.0;
+                        updateScoreHUD();
+                    }
+                }
+            } else if (S.score <= -1000 && S.score > -10000) {
+                S.score -= Math.round(5 * Math.abs(S.scoreMultiplier));
+                S.scoreMultiplier = Math.max(0.1, S.scoreMultiplier - 0.2);
+                updateScoreHUD();
+            } else {
+                // FIX: ramps and hoops are excluded from the dodge-pass scoring block
+                if (obs.userData.type === 'hoop') {
+                    // missed hoop (not collected) — penalise
+                    S.score -= 1000;
+                    spawnParticles(obs.position.x, obs.position.z, 0xd32f2f);
+                    updateScoreHUD();
+                } else if (obs.userData.type === 'cone') {
+                    if (S.coneBlockerCount > 0) {
+                        S.coneBlockerCount--;
+                        S.scoreMultiplier = 1.0;
+                        S.score += 2;
+                    } else {
+                        S.score += Math.round(2 * S.scoreMultiplier);
+                        S.scoreMultiplier = Math.round((S.scoreMultiplier + 0.5) * 10) / 10;
+                    }
+                    if (S.score > 0 && S.score % 50 === 0) S.basePaceSpeed += 0.05;
+                    updateScoreHUD();
+                } else if (obs.userData.type === 'human') {
+                    // FIX: dodging a human was previously +5 (reward for near-miss, felt contradictory)
+                    // Now neutral — no score change for dodge, penalty only on hit
+                }
+                // ramp: no score on dodge-pass, only on collision (handled below)
+            }
+        }
+
+        // ── COLLISION MATRIX ──
+        if (obs.position.z > -6.5 && obs.position.z < -3.5) {
+            if (Math.abs(obs.position.x - playerGroup.position.x) < 1.3) {
+
+                if (obs.userData.type === 'ramp') {
+                    if (!S.isJumping) {
+                        S.isJumping       = true;
+                        S.isStuntJumping  = true;
+                        S.carYVelocity    = RAMP_JUMP_STR;
+                        S.hasJumpedOrUsedRamp = true;
+                        S.springTargetYScale  = 1.65;
+                        S.springTargetXZScale = 0.70;
+                    }
+                }
+                else if (obs.userData.type === 'hoop') {
+                    if (S.isJumping && S.currentBaseCarY > 3.0 && S.currentBaseCarY < 5.4 && !obs.userData.collected) {
+                        obs.userData.collected = true;
+                        S.score += 1000;
+                        updateScoreHUD();
+                        spawnParticles(obs.position.x, obs.position.z, 0xffea00);
+                        scene.remove(obs); obstacles.splice(i, 1); continue;
+                    }
+                }
+                else if (obs.userData.type === 'collapse') {
+                    if (!S.isJumping || S.currentBaseCarY < 1.0) {
+                        triggerGameOver(); return;
+                    }
+                }
+                else {
+                    const heightLimit = (obs.userData.type === 'demon' || obs.userData.type === 'human') ? 1.6 : 1.0;
+                    if (!(S.isJumping && S.currentBaseCarY > heightLimit)) {
+                        if (obs.userData.type === 'cone') {
+                            spawnParticles(obs.position.x, obs.position.z, 0xff5722);
+                            triggerGameOver(); return;
+                        } else if (obs.userData.type === 'cat') {
+                            spawnParticles(obs.position.x, obs.position.z, 0xffb74d);
+                            const pen = Math.round(30 * S.currentCatPenaltyMult);
+                            S.score -= pen;
+                            S.scoreMultiplier = 1.0;
+                            if (!S.inLimboMode) S.coneBlockerCount = 20;
+                            updateScoreHUD();
+                            scene.remove(obs); obstacles.splice(i, 1); continue;
+                        } else if (obs.userData.type === 'demon') {
+                            spawnParticles(obs.position.x, obs.position.z, 0x7b1fa2);
+                            S.score += 15;
+                            updateScoreHUD();
+                            scene.remove(obs); obstacles.splice(i, 1); continue;
+                        } else if (obs.userData.type === 'human') {
+                            spawnParticles(obs.position.x, obs.position.z, 0xffcc80);
+                            S.score -= 100;
+                            updateScoreHUD();
+                            scene.remove(obs); obstacles.splice(i, 1); continue;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (obs.position.z > 15) { scene.remove(obs); obstacles.splice(i, 1); }
+    }
+
+    // Speed HUD — clamp minimum display to avoid "0 MPH"
+    document.getElementById('speed').innerText = `SPEED: ${Math.max(1, Math.floor(S.gameSpeed * 80))} MPH`;
+
+    renderer.render(scene, camera);
+}
+
+// ─────────────────────────────────────────────
+//  MOBILE CONTROL VISIBILITY
+// ─────────────────────────────────────────────
+function checkMobile() {
+    const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) || window.innerWidth < 768;
+    document.getElementById('mobile-controls').style.display = isMobile ? 'flex' : 'none';
+}
+checkMobile();
+window.addEventListener('resize', () => {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+    checkMobile();
+});
+
+animate();
+</script>
+</body>
+</html>
